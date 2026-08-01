@@ -1,0 +1,12 @@
+# 扫描输出（含本机隐私路径信息，且体积大）
+output/
+
+# 社区规则库原始文件（1.7MB，按 README 重新下载即可）
+data/winapp2.ini
+
+__pycache__/
+*.pyc
+
+# 工具会话状态
+.omc/
+.claude/
