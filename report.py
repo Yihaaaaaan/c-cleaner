@@ -257,7 +257,7 @@ const S = {
 const aiMap = {};
 AI_NOTES.notes.forEach(n => aiMap[n.path.toLowerCase()] = n);
 
-let SERVER = false;
+let SERVER = false, AI_AVAIL = false;
 
 function fmt(b) {
   if (b >= 1024**3) return (b/1024**3).toFixed(2) + " GB";
@@ -304,7 +304,9 @@ document.getElementById("legend").innerHTML = Object.entries(S).map(([k,s]) =>
 (async () => {
   try {
     const r = await fetch("/api/ping");
-    SERVER = (await r.json()).ok === true;
+    const p = await r.json();
+    SERVER = p.ok === true;
+    AI_AVAIL = p.ai_available === true;
   } catch (e) { SERVER = false; }
   const pill = document.getElementById("modepill");
   pill.classList.toggle("live", SERVER);
@@ -810,8 +812,8 @@ function buildDrawer(r) {
     `</div></div>` +
     `<div class="aibox" style="margin-top:14px">` + (r.aiText
       ? `<b>🤖 AI 深度分析</b>\n${esc(r.aiText)}`
-      : `<button class="btn small ghost" ${SERVER?"":"disabled"} onclick="event.stopPropagation();askAI('${esc(r.path)}')">🤖 生成 AI 深度分析</button>` +
-        `<span class="hint" style="margin-left:8px">调用本机 Claude 分析这个目录到底是什么、能不能删（约 10~30 秒）</span>`) +
+      : `<button class="btn small ghost" ${SERVER && AI_AVAIL ?"":"disabled"} onclick="event.stopPropagation();askAI('${esc(r.path)}')">🤖 生成 AI 深度分析</button>` +
+        `<span class="hint" style="margin-left:8px">${SERVER && !AI_AVAIL ? "需安装 Claude Code 后可用（可选功能）" : "调用本机 Claude 分析这个目录到底是什么、能不能删（约 10~30 秒）"}</span>`) +
     `</div></td>`;
   tr.onclick = e => e.stopPropagation();
   return tr;
@@ -1005,7 +1007,7 @@ async function renderExplorer() {
       <span style="display:flex;gap:10px;align-items:center">
         <span id="expfoot" class="hint"></span>
         <button class="btn small danger" id="expdelbtn" style="display:none" onclick="expDelete()">删除选中项</button>
-        ${unknownCount ? `<button class="btn small" onclick="aiJudge()">🤖 AI 判定未识别项（${unknownCount}）</button>` : ""}
+        ${unknownCount ? `<button class="btn small" ${AI_AVAIL ? "" : "disabled title=需安装ClaudeCode"} onclick="aiJudge()">🤖 AI 判定未识别项（${unknownCount}）</button>` : ""}
         ${expStack.length > 1 ? `<button class="btn small ghost" onclick="expJump(${expStack.length-2})">⬅ 返回上级</button>` : ""}
         <button class="btn small ghost" onclick="closeExplorer()">关闭</button>
       </span></div>`;

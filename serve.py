@@ -30,7 +30,7 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from knowledge import match_rule  # noqa: E402
+from knowledge import match_rule, protected_titles  # noqa: E402
 
 OUT = os.path.join(HERE, "output")
 PORT = 8756
@@ -260,9 +260,11 @@ def api_ai_judge(path, entries):
         "{\"条目名\": {\"safety\": \"safe|caution|user|danger|keep\", "
         "\"why\": \"是什么+能否删+删了什么后果，≤60字\"}}\n"
         "每个条目名必须与输入完全一致。禁止寒暄或解释。\n"
-        "硬性规则：OneNote 缓存一律 keep；微信聊天记录一律 keep。\n"
+        + protected_clause() + "\n"
         "条目：" + json.dumps(listing, ensure_ascii=False)
     )
+    if not CLAUDE_AVAILABLE:
+        return {"error": AI_UNAVAILABLE_MSG}
     try:
         r = run_claude(prompt, 240)
         txt = (r.stdout or "").strip()
@@ -337,6 +339,19 @@ def _save_cache(name, data):
         json.dump(data, f, ensure_ascii=False, indent=1)
 
 
+CLAUDE_AVAILABLE = shutil.which("claude") is not None
+AI_UNAVAILABLE_MSG = ("本机未安装 Claude CLI，AI 分析功能不可用（其他功能不受影响）。"
+                      "安装 Claude Code (https://claude.com/claude-code) 后重启本服务即可启用。")
+
+
+def protected_clause():
+    """用户保护规则 → AI 提示词硬性条款。"""
+    titles = protected_titles()
+    if not titles:
+        return "硬性规则：不确定的内容一律不建议删除。"
+    return "硬性规则：以下内容用户要求永不删除，必须判为 keep——" + "、".join(titles) + "。"
+
+
 def run_claude(prompt, timeout=180):
     """在中性目录运行 claude CLI，避免被本项目的 CLAUDE.md/记忆/模式污染回答。
     prompt 走 stdin——多行文本作为命令行参数会被 Windows cmd 在换行处截断。"""
@@ -364,9 +379,10 @@ def api_ai(path, context):
         "能否删除：（能删多少、删了什么后果）\n"
         "建议操作：（具体步骤或命令）\n\n"
         "禁止：寒暄、自我介绍、复述任务、询问需求、谈论与该目录无关的任何内容。\n"
-        "硬性规则：OneNote 缓存一律不删；微信聊天记录一定不删（只可清官方确认的"
-        "更新包/缓存，且必须说明不含聊天记录）。"
+        + protected_clause()
     )
+    if not CLAUDE_AVAILABLE:
+        return {"error": AI_UNAVAILABLE_MSG, "detail": detail}
     try:
         r = run_claude(prompt, 180)
         txt = (r.stdout or "").strip()
@@ -1015,7 +1031,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except OSError:
                 self._send(404, {"error": "report.html 不存在，请先运行 python main.py"})
         elif self.path == "/api/ping":
-            self._send(200, {"ok": True, "version": "1.2"})
+            self._send(200, {"ok": True, "version": "1.3", "ai_available": CLAUDE_AVAILABLE})
         elif self.path == "/api/cleanlog":
             try:
                 with open(os.path.join(OUT, "cleanup_log.json"), encoding="utf-8") as f:

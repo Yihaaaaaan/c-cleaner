@@ -10,3 +10,11 @@ __pycache__/
 # 工具会话状态
 .omc/
 .claude/
+
+# 个人保护规则（个人配置，模板见 user_rules.example.json）
+user_rules.json
+
+# 打包产物
+build/
+dist/
+*.egg-info/

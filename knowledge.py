@@ -121,16 +121,6 @@ RULES = [
          desc="Microsoft Store 应用的安装目录，权限严格保护。",
          action="通过 设置→应用 卸载不用的商店应用，别手动删"),
 
-    # ============ 用户指定保留项（用户明确要求：OneNote 缓存永远不删） ============
-    dict(pattern="Users/<user>/AppData/Local/Microsoft/OneNote", title="OneNote 桌面版笔记缓存（保留）",
-         safety="keep",
-         desc="OneNote 桌面版的本地笔记缓存。按用户要求：OneNote 缓存一律保留，不做清理建议。",
-         action="保留，不要清理"),
-    dict(pattern="Users/<user>/AppData/Local/Packages/Microsoft.Office.OneNote_8wekyb3d8bbwe",
-         title="OneNote 商店版笔记缓存（保留）", safety="keep",
-         desc="商店版 OneNote 的本地笔记数据。按用户要求：OneNote 缓存一律保留，不做清理建议。",
-         action="保留，不要清理"),
-
     # ============ 用户目录：缓存类（safe） ============
     dict(pattern="Users/<user>/AppData/Local/Temp", title="用户临时文件", safety="safe",
          desc="程序运行产生的临时文件，是 C 盘膨胀最常见的原因之一。",
@@ -202,12 +192,12 @@ RULES = [
     dict(pattern="Users/<user>/AppData/Roaming/Tencent", title="腾讯系软件数据（QQ等）", safety="user",
          desc="QQ 等腾讯软件的聊天记录、图片视频缓存。聊天记录删了找不回。",
          action="在 QQ 设置里用'清理缓存'，别直接删文件夹"),
-    dict(pattern="Users/<user>/Documents/WeChat Files", title="微信聊天记录（保留勿删）", safety="keep",
-         desc="微信的聊天记录、接收的图片/视频/文件。按用户要求：微信聊天记录一律保留，绝不删除。",
-         action="不要删！空间紧张时只能在微信里 设置→文件管理→更改目录 迁移到 D 盘（数据不丢失）"),
-    dict(pattern="Users/<user>/Documents/xwechat_files", title="微信(新版)聊天记录（保留勿删）", safety="keep",
-         desc="新版微信的聊天记录和文件。按用户要求：微信聊天记录一律保留，绝不删除。",
-         action="不要删！空间紧张时只能在微信里迁移存储目录到 D 盘（数据不丢失）"),
+    dict(pattern="Users/<user>/Documents/WeChat Files", title="微信聊天数据", safety="user",
+         desc="微信的聊天记录、接收的图片/视频/文件。删了聊天记录就找不回来！",
+         action="不建议删。空间紧张时在微信里 设置→文件管理→更改目录 迁移到其他盘（数据不丢失）"),
+    dict(pattern="Users/<user>/Documents/xwechat_files", title="微信(新版)聊天数据", safety="user",
+         desc="新版微信的聊天记录和文件。删了聊天记录就找不回来！",
+         action="不建议删。空间紧张时在微信里迁移存储目录到其他盘（数据不丢失）"),
     dict(pattern="Users/<user>/AppData/Local/Steam", title="Steam 本地缓存", safety="safe",
          desc="Steam 的着色器缓存和网页缓存（游戏本体不在这）。", action="可清，Steam 设置里也有清理入口"),
     dict(pattern="Users/<user>/AppData/Roaming/Adobe", title="Adobe 配置与缓存", safety="caution",
@@ -292,6 +282,39 @@ RULES = [
 ]
 
 
+# ---------- 个人保护规则（user_rules.json，优先级最高，不入 git） ----------
+def _load_user_rules():
+    """user_rules.json 里的 protected 条目 → keep 级规则，插到 RULES 最前。
+    keep 级在 match_rule 里不可被社区规则覆盖，形成最高优先级。"""
+    import os as _o
+    import json as _j
+    p = _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), "user_rules.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            protected = _j.load(f).get("protected", [])
+    except (OSError, _j.JSONDecodeError):
+        return []
+    rules = []
+    for it in protected:
+        if not it.get("pattern"):
+            continue
+        rules.append(dict(pattern=it["pattern"], title=it.get("title", it["pattern"]),
+                          safety="keep",
+                          desc=it.get("desc", "个人保护规则：保留勿删。"),
+                          action=it.get("action", "保留，不要清理"),
+                          user_protected=True))
+    return rules
+
+
+USER_PROTECTED = _load_user_rules()
+RULES = USER_PROTECTED + RULES
+
+
+def protected_titles():
+    """给 AI 提示词用：用户要求永不删除的内容清单。"""
+    return [r["title"] for r in USER_PROTECTED]
+
+
 # ---------- Winapp2 社区规则库（可选，由 winapp2.py 生成） ----------
 import os as _os
 import json as _json
@@ -332,7 +355,7 @@ def _w2_lookup(p):
 
 
 def match_rule(rel_path):
-    """给定相对盘符根的路径（如 'Users/18500/AppData/Local/Temp'），返回匹配的规则或 None。
+    """给定相对盘符根的路径（如 'Users/<用户名>/AppData/Local/Temp'），返回匹配的规则或 None。
     优先级：本地知识库 keep/danger 绝对优先 > 更具体（更长 pattern）者胜 > 本地库。"""
     import fnmatch
     p = rel_path.replace("\\", "/").strip("/").lower()

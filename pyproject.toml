@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "c-cleaner"
+version = "1.3.0"
+description = "SpaceSniffer + AI: disk scanner that tells you what every space hog is and whether it's safe to delete / 带AI判定的磁盘清理分析器"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Yihan Wang" }]
+keywords = ["disk", "cleaner", "windows", "treemap", "ai"]
+classifiers = [
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+]
+
+[project.scripts]
+c-cleaner = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "scanner", "analyze", "knowledge", "report", "serve", "winapp2"]

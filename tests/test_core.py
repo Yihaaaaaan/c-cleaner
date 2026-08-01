@@ -12,20 +12,25 @@ import knowledge          # noqa: E402
 import serve              # noqa: E402
 import winapp2 as w2      # noqa: E402
 
-USER = os.environ.get("USERNAME", "18500")
+USER = os.environ.get("USERNAME") or os.path.basename(os.path.expanduser("~"))
 
 
 class TestKnowledge(unittest.TestCase):
     """知识库匹配：用户硬规则绝不被覆盖。"""
 
-    def test_wechat_chat_keep(self):
+    def test_wechat_chat_protected(self):
         r = knowledge.match_rule(f"Users/{USER}/Documents/WeChat Files")
         self.assertIsNotNone(r)
-        self.assertEqual(r["safety"], "keep")
+        if knowledge.USER_PROTECTED:            # 配了个人保护规则 → keep
+            self.assertEqual(r["safety"], "keep")
+        else:                                    # 干净 clone → 至少是"自行决定"，绝不能是 safe
+            self.assertIn(r["safety"], ("user", "keep"))
 
-    def test_onenote_cache_keep(self):
-        r = knowledge.match_rule(f"Users/{USER}/AppData/Local/Microsoft/OneNote")
-        self.assertEqual(r["safety"], "keep")
+    def test_user_protected_rules_are_keep(self):
+        for r in knowledge.USER_PROTECTED:
+            self.assertEqual(r["safety"], "keep")
+            hit = knowledge.match_rule(r["pattern"].replace("<user>", USER))
+            self.assertEqual(hit["safety"], "keep", r["pattern"])
 
     def test_temp_safe(self):
         r = knowledge.match_rule(f"Users/{USER}/AppData/Local/Temp")

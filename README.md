@@ -1,8 +1,17 @@
-# C盘清理分析器 (c-cleaner) v1.0
+# c-cleaner — 带 AI 判定的磁盘清理分析器
+
+> **EN** — A Windows disk-space analyzer like SpaceSniffer/WizTree, plus an **AI brain**:
+> for every space hog it tells you *what it is, whether it's safe to delete, and how*.
+> Pure Python stdlib, zero dependencies, runs offline. Scans ~900k files in ~20 s.
+> Nothing is ever deleted automatically — cleanups go to a reviewable, restorable
+> quarantine first. AI features (via local Claude CLI) are optional.
+> Run `python main.py`, browse the interactive report at `127.0.0.1:8756`. MIT licensed.
 
 像 SpaceSniffer 一样扫描磁盘占用，但多了 **AI 大脑**：自动告诉你每个占空间的目录
-**是什么、里面装了什么、能不能删、怎么删**。工具本身**永远不会自动删除任何文件**，
-删不删由你决定。
+**是什么、里面装了什么、能不能删、怎么删**。工具本身**永远不会自动删除任何文件**——
+清理先进可复检、可还原的隔离区，删不删始终由你决定。
+
+![screenshot](docs/screenshot.png)
 
 ## 使用
 
@@ -14,7 +23,14 @@ python main.py --static     # 只生成静态报告不起服务（只读模式�
 python serve.py             # 报告已生成时，单独启动服务 http://127.0.0.1:8756
 ```
 
-纯 Python 标准库，无需安装任何依赖。扫描 86 万文件约 20 秒。
+纯 Python 标准库，无需安装任何依赖（Python ≥3.10）。扫描 86 万文件约 20 秒。
+Windows 双击 `重新扫描.bat` / `启动报告.bat` 亦可。
+
+**个人保护规则**：复制 `user_rules.example.json` 为 `user_rules.json`，写入你永远不想删的
+路径（如聊天记录、笔记缓存），它们会以最高优先级判为 🔒保留，AI 和社区规则都无法覆盖。
+
+**AI 功能（可选）**：装有 [Claude Code](https://claude.com/claude-code) 时自动启用
+（AI 深度分析 / 批量判定未识别目录）；未安装则相关按钮置灰，其他功能不受影响。
 
 ## 报告功能
 

@@ -1,0 +1,29 @@
+{
+  "_说明": "个人保护规则：这里列出的路径永远判定为「保留勿删」，优先级最高，任何社区规则/AI 判定都不能覆盖。pattern 相对盘符根，<user> 匹配任意用户名。此文件不入 git（个人配置），模板见 user_rules.example.json",
+  "protected": [
+    {
+      "pattern": "Users/<user>/AppData/Local/Microsoft/OneNote",
+      "title": "OneNote 桌面版笔记缓存（保留）",
+      "desc": "OneNote 桌面版的本地笔记缓存。按用户要求：OneNote 缓存一律保留，不做清理建议。",
+      "action": "保留，不要清理"
+    },
+    {
+      "pattern": "Users/<user>/AppData/Local/Packages/Microsoft.Office.OneNote_8wekyb3d8bbwe",
+      "title": "OneNote 商店版笔记缓存（保留）",
+      "desc": "商店版 OneNote 的本地笔记数据。按用户要求：OneNote 缓存一律保留，不做清理建议。",
+      "action": "保留，不要清理"
+    },
+    {
+      "pattern": "Users/<user>/Documents/WeChat Files",
+      "title": "微信聊天记录（保留勿删）",
+      "desc": "微信的聊天记录、接收的图片/视频/文件。按用户要求：微信聊天记录一律保留，绝不删除。",
+      "action": "不要删！空间紧张时只能在微信里 设置→文件管理→更改目录 迁移到 D 盘（数据不丢失）"
+    },
+    {
+      "pattern": "Users/<user>/Documents/xwechat_files",
+      "title": "微信(新版)聊天记录（保留勿删）",
+      "desc": "新版微信的聊天记录和文件。按用户要求：微信聊天记录一律保留，绝不删除。",
+      "action": "不要删！空间紧张时只能在微信里迁移存储目录到 D 盘（数据不丢失）"
+    }
+  ]
+}
