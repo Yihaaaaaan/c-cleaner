@@ -18,6 +18,7 @@ serve.py — 报告本地服务
 import http.server
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,9 @@ from knowledge import match_rule  # noqa: E402
 
 OUT = os.path.join(HERE, "output")
 PORT = 8756
+# 每次启动生成随机令牌，注入报告页面；所有修改类 API 校验它——
+# 防止本机其他程序悄悄调用清理接口
+TOKEN = secrets.token_hex(16)
 
 DETAIL_TIME_BUDGET = 4.0     # 秒：目录深挖的时间预算
 DETAIL_MAX_FILES = 200000
@@ -200,6 +204,7 @@ def api_browse(path):
     n_dirs = sum(1 for e in listing if e.is_dir(follow_symlinks=False))
     per_dir_budget = max(0.3, BROWSE_TIME_BUDGET / max(n_dirs, 1))
     ai_notes = load_ai_notes_map()
+    judged_before = _load_cache("ai_judge_cache.json").get(path, {})   # 历史 AI 判定
     for e in listing:
         try:
             st = e.stat(follow_symlinks=False)
@@ -210,6 +215,9 @@ def api_browse(path):
                 size, exact = st.st_size, True
             rel = (drive_rel_base + "/" + e.name).strip("/")
             safety, why = judge_entry(rel, e.name, is_dir, ai_notes)
+            if safety is None and e.name in judged_before:
+                v = judged_before[e.name]
+                safety, why = v.get("safety"), "（AI 记忆）" + v.get("why", "")
             entries.append({
                 "name": e.name, "is_dir": is_dir, "size": size, "size_exact": exact,
                 "mtime": time.strftime("%Y-%m-%d", time.localtime(st.st_mtime)),
@@ -237,9 +245,15 @@ def quick_dir_size(path, budget):
 
 
 def api_ai_judge(path, entries):
-    """AI 批量判定未识别条目。entries = [{name, is_dir, size}]，最多 40 条。"""
+    """AI 批量判定未识别条目。entries = [{name, is_dir, size}]，最多 40 条。
+    结果持久化到 ai_judge_cache.json，下次浏览同一目录自动带出。"""
+    jcache = _load_cache("ai_judge_cache.json")
+    known = jcache.get(path, {})
+    fresh = [e for e in entries if e["name"] not in known]
+    if not fresh:
+        return {"verdicts": known, "cached": True}
     listing = [{"name": e["name"], "类型": "目录" if e.get("is_dir") else "文件",
-                "大小MB": round(e.get("size", 0) / 1024 / 1024, 1)} for e in entries[:40]]
+                "大小MB": round(e.get("size", 0) / 1024 / 1024, 1)} for e in fresh[:40]]
     prompt = (
         "任务：逐条判定下列 Windows 条目（都位于 " + path + " 内）：每项是什么、能否删除。\n"
         "只输出一个 JSON 对象，无任何其他文字，格式：\n"
@@ -256,7 +270,11 @@ def api_ai_judge(path, entries):
             txt = txt.split("```")[1]
             if txt.startswith("json"):
                 txt = txt[4:]
-        return {"verdicts": json.loads(txt)}
+        verdicts = json.loads(txt)
+        known.update(verdicts)
+        jcache[path] = known
+        _save_cache("ai_judge_cache.json", jcache)
+        return {"verdicts": known}
     except FileNotFoundError:
         return {"error": "未找到 claude 命令行"}
     except subprocess.TimeoutExpired:
@@ -306,6 +324,19 @@ def api_detail(path):
     }
 
 
+def _load_cache(name):
+    try:
+        with open(os.path.join(OUT, name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_cache(name, data):
+    with open(os.path.join(OUT, name), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
 def run_claude(prompt, timeout=180):
     """在中性目录运行 claude CLI，避免被本项目的 CLAUDE.md/记忆/模式污染回答。
     prompt 走 stdin——多行文本作为命令行参数会被 Windows cmd 在换行处截断。"""
@@ -316,7 +347,11 @@ def run_claude(prompt, timeout=180):
 
 
 def api_ai(path, context):
-    """调用 claude CLI 做深度分析。context 是页面传来的已知信息（规则/大小等）。"""
+    """调用 claude CLI 做深度分析。context 是页面传来的已知信息（规则/大小等）。
+    结果持久化到 ai_cache.json——同一目录不重复花钱花时间。"""
+    cache = _load_cache("ai_cache.json")
+    if path in cache and not context.get("force"):
+        return {"text": cache[path], "cached": True}
     detail = api_detail(path)
     prompt = (
         "任务：分析 Windows 目录「" + path + "」能否清理。只根据下面提供的数据回答。\n\n"
@@ -335,6 +370,9 @@ def api_ai(path, context):
     try:
         r = run_claude(prompt, 180)
         txt = (r.stdout or "").strip()
+        if txt:
+            cache[path] = txt
+            _save_cache("ai_cache.json", cache)
         return {"text": txt or "（AI 未返回内容）", "detail": detail}
     except FileNotFoundError:
         return {"error": "未找到 claude 命令行，无法进行 AI 分析", "detail": detail}
@@ -921,7 +959,20 @@ def api_quarantine(action, batch=None):
     roots = quarantine_roots()
     if action == "status":
         total = sum(dir_size(r) for r in roots)
-        return {"roots": roots, "total_bytes": total}
+        oldest_days = None
+        for r in roots:
+            try:
+                ts_dirs = [d for d in os.listdir(r) if TS_RE.match(d)]
+            except OSError:
+                continue
+            for tsd in ts_dirs:
+                try:
+                    t = time.mktime(time.strptime(tsd, "%Y%m%d_%H%M%S"))
+                except ValueError:
+                    continue
+                days = int((time.time() - t) // 86400)
+                oldest_days = days if oldest_days is None else max(oldest_days, days)
+        return {"roots": roots, "total_bytes": total, "oldest_days": oldest_days}
     if action == "empty":
         freed = 0
         if batch:                     # 只清指定批次
@@ -957,7 +1008,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path in ("/", "/report", "/report.html"):
             try:
                 with open(os.path.join(OUT, "report.html"), "rb") as f:
-                    self._send(200, f.read(), "text/html; charset=utf-8")
+                    html = f.read()
+                inject = ("<script>window.CC_TOKEN='" + TOKEN + "';</script><script>").encode()
+                html = html.replace(b"<script>", inject, 1)
+                self._send(200, html, "text/html; charset=utf-8")
             except OSError:
                 self._send(404, {"error": "report.html 不存在，请先运行 python main.py"})
         elif self.path == "/api/ping":
@@ -972,6 +1026,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.headers.get("X-CC-Token") != TOKEN:
+            self._send(403, {"error": "缺少或错误的访问令牌——请通过报告页面操作"})
+            return
         try:
             n = int(self.headers.get("Content-Length", 0))
             req = json.loads(self.rfile.read(n) or b"{}")

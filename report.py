@@ -266,15 +266,23 @@ function fmt(b) {
 }
 function esc(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 async function api(ep, body) {
-  const r = await fetch(ep, { method: "POST", headers: {"Content-Type":"application/json"},
-                              body: JSON.stringify(body || {}) });
+  const r = await fetch(ep, { method: "POST",
+    headers: {"Content-Type":"application/json", "X-CC-Token": window.CC_TOKEN || ""},
+    body: JSON.stringify(body || {}) });
   return r.json();
 }
 
 /* ---------- 顶部 ---------- */
 const m = DATA.meta;
-document.getElementById("meta").textContent =
-  `${m.target} · 扫描于 ${m.scanned_at} · ${m.file_count.toLocaleString()} 个文件 · 耗时 ${m.elapsed_sec} 秒`;
+{
+  let metaTxt = `${m.target} · 扫描于 ${m.scanned_at} · ${m.file_count.toLocaleString()} 个文件 · 耗时 ${m.elapsed_sec} 秒`;
+  const pv = DATA.prev_scan;
+  if (pv) {
+    const df = m.disk_free - pv.disk_free;
+    metaTxt += ` · 较上次(${pv.ts.slice(5,16)})剩余空间${df >= 0 ? "+" : "−"}${fmt(Math.abs(df))}`;
+  }
+  document.getElementById("meta").textContent = metaTxt;
+}
 
 const capbar = document.getElementById("capbar");
 const segs = [
@@ -480,7 +488,8 @@ async function refreshQuarantine() {
     const pill = document.getElementById("qpill");
     if (q.total_bytes > 0) {
       pill.style.display = "";
-      pill.innerHTML = `🗑️ 隔离区 ${fmt(q.total_bytes)} <a style="color:var(--accent);cursor:pointer;margin-left:4px" onclick="emptyQuarantine()">复检并清空</a>`;
+      const age = q.oldest_days != null && q.oldest_days >= 1 ? `（最老 ${q.oldest_days} 天${q.oldest_days >= 30 ? " ⏰该复检清空了" : ""}）` : "";
+      pill.innerHTML = `🗑️ 隔离区 ${fmt(q.total_bytes)}${age} <a style="color:var(--accent);cursor:pointer;margin-left:4px" onclick="emptyQuarantine()">复检并清空</a>`;
     } else pill.style.display = "none";
   } catch (e) {}
 }
@@ -738,7 +747,10 @@ function renderRows() {
     if (cl) tr.style.opacity = ".55";
     tr.innerHTML =
       `<td>${canCheck ? `<input type="checkbox" ${checked.has(r.path)?"checked":""}>` : ""}</td>` +
-      `<td class="num">${cl ? `<s>${fmt(r.size)}</s>` : fmt(r.size)}</td>` +
+      `<td class="num">${cl ? `<s>${fmt(r.size)}</s>` : fmt(r.size)}${
+        (!cl && r.delta != null && Math.abs(r.delta) >= 10*1024*1024)
+          ? `<div style="font-size:11px;font-weight:500;color:${r.delta > 0 ? "var(--keep)" : "var(--safe)"}">${r.delta > 0 ? "▲+" : "▼−"}${fmt(Math.abs(r.delta))}</div>` : ""
+      }</td>` +
       `<td style="white-space:nowrap">${cl
         ? `<span class="badge" style="color:var(--safe)">✓ 已清理 ${fmt(cl.bytes)}</span>`
         : `<span class="badge" style="color:${s.color}">${s.icon} ${s.label}</span>`}</td>` +
