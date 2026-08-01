@@ -222,9 +222,19 @@ def convert(entries):
     return rules, active_sections
 
 
+WINAPP2_URL = "https://raw.githubusercontent.com/MoscaDotTo/Winapp2/master/Winapp2.ini"
+
+
 def main():
-    src = sys.argv[1] if len(sys.argv) > 1 else "data/winapp2.ini"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "output/winapp2_rules.json"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    src = args[0] if args else "data/winapp2.ini"
+    dst = args[1] if len(args) > 1 else "output/winapp2_rules.json"
+    if "--update" in sys.argv:
+        import urllib.request
+        print("[winapp2] 正在从 GitHub 下载最新规则库…")
+        os.makedirs(os.path.dirname(src) or ".", exist_ok=True)
+        urllib.request.urlretrieve(WINAPP2_URL, src)
+        print(f"[winapp2] 已更新 {src}")
     with open(src, encoding="utf-8-sig", errors="replace") as f:
         text = f.read()
     entries = parse_ini(text)

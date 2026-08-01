@@ -7,6 +7,7 @@ analyze.py — 把扫描结果和知识库对上号
 - unknowns: 知识库没认出来的大目录（交给 AI 进一步分析）
 - tree 上每个节点补充 rule 信息，供报告的 treemap 使用
 """
+import os
 import sys
 import json
 
@@ -79,10 +80,47 @@ def main():
         seen_paths.append(f_["path"])
         potential[f_["safety"]] = potential.get(f_["safety"], 0) + f_["size"]
 
+    # 增量对比：和上一次扫描比大小，findings 带 delta；快照追加进 history.jsonl
+    hist_file = os.path.join(os.path.dirname(os.path.abspath(out_file)), "history.jsonl")
+    prev = None
+    try:
+        with open(hist_file, encoding="utf-8") as f:
+            lines = [ln for ln in f.read().splitlines() if ln.strip()]
+        # 找最近一条"不是本次扫描"的快照
+        for ln in reversed(lines):
+            snap = json.loads(ln)
+            if snap["ts"] != scan["scanned_at"]:
+                prev = snap
+                break
+    except (OSError, json.JSONDecodeError):
+        pass
+    if prev:
+        for f_ in findings:
+            old = prev["sizes"].get(f_["path"].lower())
+            if old is not None:
+                f_["delta"] = f_["size"] - old
+    # 本次扫描尚未入库时才追加快照（同一次扫描重复分析不重复记）
+    already = False
+    try:
+        with open(hist_file, encoding="utf-8") as f:
+            already = any(json.loads(ln)["ts"] == scan["scanned_at"]
+                          for ln in f.read().splitlines() if ln.strip())
+    except (OSError, json.JSONDecodeError):
+        pass
+    if not already:
+        with open(hist_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": scan["scanned_at"], "disk_free": scan["disk_free"],
+                "scanned_size": scan["scanned_size"],
+                "sizes": {f_["path"].lower(): f_["size"] for f_ in findings},
+            }, ensure_ascii=False) + "\n")
+
     result = {
         "meta": {k: scan[k] for k in ("target", "scanned_at", "elapsed_sec", "file_count",
                                       "disk_total", "disk_used", "disk_free",
                                       "scanned_size", "unscanned_size", "error_count")},
+        "prev_scan": prev and {"ts": prev["ts"], "disk_free": prev["disk_free"],
+                               "scanned_size": prev["scanned_size"]},
         "potential_by_safety": potential,
         "findings": findings,
         "unknowns": unknowns,
