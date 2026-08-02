@@ -339,9 +339,26 @@ def _save_cache(name, data):
         json.dump(data, f, ensure_ascii=False, indent=1)
 
 
-CLAUDE_AVAILABLE = shutil.which("claude") is not None
-AI_UNAVAILABLE_MSG = ("本机未安装 Claude CLI，AI 分析功能不可用（其他功能不受影响）。"
-                      "安装 Claude Code (https://claude.com/claude-code) 后重启本服务即可启用。")
+# 多 AI 后端：探测本机装了哪个 AI 命令行，取第一个可用的；
+# 环境变量 CC_AI_CLI 可强制指定（claude/codex/gemini）
+AI_PROVIDERS = [
+    ("claude", "claude -p"),      # Claude Code
+    ("codex",  "codex exec -"),   # OpenAI Codex CLI（- = 从 stdin 读提示词）
+    ("gemini", "gemini"),         # Google Gemini CLI（管道输入即非交互模式）
+]
+def _detect_ai():
+    forced = os.environ.get("CC_AI_CLI", "").strip().lower()
+    for name, cmd in AI_PROVIDERS:
+        if forced and name != forced:
+            continue
+        if shutil.which(name):
+            return name, cmd
+    return None, None
+
+AI_PROVIDER, AI_CMD = _detect_ai()
+CLAUDE_AVAILABLE = AI_PROVIDER is not None
+AI_UNAVAILABLE_MSG = ("本机未检测到可用的 AI 命令行（支持 Claude Code / OpenAI Codex CLI / "
+                      "Gemini CLI，任装其一即可），AI 分析功能不可用，其他功能不受影响。")
 
 
 def protected_clause():
@@ -353,10 +370,10 @@ def protected_clause():
 
 
 def run_claude(prompt, timeout=180):
-    """在中性目录运行 claude CLI，避免被本项目的 CLAUDE.md/记忆/模式污染回答。
+    """在中性目录运行检测到的 AI CLI（claude/codex/gemini），避免被项目上下文污染。
     prompt 走 stdin——多行文本作为命令行参数会被 Windows cmd 在换行处截断。"""
     neutral = os.environ.get("TEMP") or os.path.expanduser("~")
-    return subprocess.run("claude -p", input=prompt, capture_output=True, text=True,
+    return subprocess.run(AI_CMD, input=prompt, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout,
                           shell=True, cwd=neutral)
 
@@ -1031,7 +1048,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except OSError:
                 self._send(404, {"error": "report.html 不存在，请先运行 python main.py"})
         elif self.path == "/api/ping":
-            self._send(200, {"ok": True, "version": "1.3", "ai_available": CLAUDE_AVAILABLE})
+            self._send(200, {"ok": True, "version": "1.4",
+                             "ai_available": CLAUDE_AVAILABLE, "ai_provider": AI_PROVIDER})
         elif self.path == "/api/cleanlog":
             try:
                 with open(os.path.join(OUT, "cleanup_log.json"), encoding="utf-8") as f:

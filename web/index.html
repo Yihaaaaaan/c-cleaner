@@ -1,0 +1,104 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C盘清理分析报告</title>
+<style>
+/*__CSS__*/
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">C-CLEANER · 磁盘分析</div>
+  <h1>C盘清理分析报告</h1>
+  <div class="sub" id="meta"></div>
+  <div class="statusline">
+    <span class="pill" id="modepill"><span class="dot2"></span><span id="modetext">检测服务中…</span></span>
+    <span class="pill" id="qpill" style="display:none"></span>
+    <span class="pill" id="rescanpill" style="display:none"><a onclick="rescan()">🔄 重新扫描</a></span>
+  </div>
+
+  <div class="capacity">
+    <div class="capbar" id="capbar"></div>
+    <div class="caplegend" id="caplegend"></div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-v="map">🗺 磁盘地图</button>
+    <button class="tab" data-v="list">📋 清理清单</button>
+    <button class="tab" data-v="browse">📂 文件浏览器</button>
+    <button class="tab" data-v="tools">🧰 专项工具</button>
+    <button class="tab" data-v="quarantine">🗑 隔离区</button>
+  </nav>
+
+  <!-- 磁盘地图 -->
+  <section class="view" id="view-map">
+    <div class="legend" id="legend"></div>
+    <div class="split">
+      <div class="panel">
+        <div class="crumbs" id="crumbs"></div>
+        <div id="treemap"></div>
+        <div class="hint" style="margin-top:8px">点击色块进入下一级，点击上方路径返回。颜色 = 安全等级；灰色 = 未识别。</div>
+      </div>
+      <div class="panel" id="mapdetail"><div class="hint">👈 点击左侧色块查看详情</div></div>
+    </div>
+  </section>
+
+  <!-- 清理清单 -->
+  <section class="view" id="view-list">
+    <div class="filters" id="filters"></div>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th style="width:34px"></th>
+        <th class="sortable" id="th-size">大小 <span class="arrow">▼</span></th>
+        <th class="sortable" id="th-safety">安全等级 <span class="arrow">▼</span></th>
+        <th>项目 / 说明 / 清理方法（点击行展开详细分析）</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <!-- 文件浏览器 -->
+  <section class="view" id="view-browse">
+    <div class="panel">
+      <div class="crumbs" id="bcrumbs"></div>
+      <div id="bsafescan"></div>
+      <div id="btable"></div>
+      <div id="bfoot" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
+    </div>
+  </section>
+
+  <!-- 专项工具 -->
+  <section class="view" id="view-tools">
+    <div class="card"><div class="cardhead"><h4 style="margin:0">🔁 重复文件查找</h4>
+      <span class="hint">按大小分组 + 内容指纹（头1MB+尾64KB），每组必须保留至少一份</span></div>
+      <div id="dupebox" style="margin-top:8px"></div></div>
+    <div class="card"><div class="cardhead"><h4 style="margin:0">🧩 卸载残留检测</h4>
+      <span class="hint">注册表已装清单 vs Program Files 实际目录比对——删除前请自行确认软件确实已卸载</span></div>
+      <div id="leftbox" style="margin-top:8px"></div></div>
+  </section>
+
+  <!-- 隔离区 -->
+  <section class="view" id="view-quarantine">
+    <div class="notice">清理的内容先进隔离区（可反悔）。<b>清空 = 永久删除</b>；还原 = 按清单放回原位置。
+      清空前会对每个文件做"不可再生特征"复检。</div>
+    <div id="qbox"></div>
+  </section>
+</div>
+
+<!-- 全局清理篮 -->
+<div id="basketbar">
+  <div id="basketlist"><div class="inner2" id="basketitems"></div></div>
+  <div class="inner">
+    <span class="sum" id="bsum"></span>
+    <span style="flex:1"></span>
+    <button class="btn ghost small" onclick="toggleBasketList()">查看</button>
+    <button class="btn ghost small" onclick="clearBasket()">清空篮子</button>
+    <button class="btn" id="submitbtn" onclick="submitBasket()">提交清理</button>
+  </div>
+</div>
+
+<div id="overlay"><div id="modal"></div></div>
+<div id="tip"></div>
+<div id="toasts"></div>
+
+<script>
+/*__JS__*/
+</script>
