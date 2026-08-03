@@ -18,7 +18,7 @@ const aiMap = {};
 AI_NOTES.notes.forEach(n => aiMap[n.path.toLowerCase()] = n);
 const m = DATA.meta;
 
-let SERVER = false, AI_AVAIL = false, AI_PROVIDER = null;
+let SERVER = false, AI_AVAIL = false, AI_PROVIDER = null, DRIVES = ["C:"];
 const basket = new Map();          // path -> {path,size,source,title,safety,base,name}
 const cleanedMap = {};             // path(lower) -> {bytes}
 const detailCache = {}, browseCache = {}, safeScanCache = {};
@@ -126,6 +126,7 @@ function gotoBrowse(path) {
     SERVER = p.ok === true;
     AI_AVAIL = p.ai_available === true;
     AI_PROVIDER = p.ai_provider;
+    if (p.drives && p.drives.length) DRIVES = p.drives;
   } catch (e) { SERVER = false; }
   const pill = document.getElementById("modepill");
   pill.classList.toggle("live", SERVER);
@@ -161,12 +162,25 @@ async function loadCleanlog() {
     if (parseHash().view === "list") renderRows();
   } catch (e) {}
 }
-async function rescan() {
+async function rescan(target) {
   const modal = document.getElementById("modal");
-  modal.innerHTML = `<h3>重新扫描中…</h3>` + spin("扫描磁盘并生成新报告（约 20~60 秒），完成后自动刷新");
+  if (target === undefined) {
+    // 选择扫描目标盘
+    modal.innerHTML = `<h3>重新扫描</h3><div class="hint">选择要扫描分析的磁盘（当前：${esc(m.target)}）</div>
+      <div id="drivebtns" style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0"></div>
+      <div class="foot"><button class="btn ghost" onclick="closeModal()">取消</button></div>`;
+    const box = modal.querySelector("#drivebtns");
+    for (const d of DRIVES) {
+      const b = el("button", {className: "btn" + (m.target.toUpperCase().startsWith(d.toUpperCase()) ? "" : " ghost"),
+        onclick: () => rescan(d + "\\")}, "扫描 " + esc(d));
+      box.appendChild(b);
+    }
+    openModal(); return;
+  }
+  modal.innerHTML = `<h3>重新扫描中…</h3>` + spin(`扫描 ${esc(target)} 并生成新报告（约 20~60 秒），完成后自动刷新`);
   openModal();
   try {
-    const r = await api("/api/rescan", {});
+    const r = await api("/api/rescan", {target});
     if (r.ok) { location.reload(); return; }
     modal.innerHTML = `<h3>扫描失败</h3><div class="notice bad">${esc(JSON.stringify(r))}</div>
       <div class="foot"><button class="btn ghost" onclick="closeModal()">关闭</button></div>`;

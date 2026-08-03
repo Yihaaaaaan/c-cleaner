@@ -34,6 +34,7 @@ from knowledge import match_rule, protected_titles  # noqa: E402
 
 OUT = os.path.join(HERE, "output")
 PORT = 8756
+VERSION = "1.5.0"          # 唯一版本定义处（pyproject.toml 同步此值）
 # 每次启动生成随机令牌，注入报告页面；所有修改类 API 校验它——
 # 防止本机其他程序悄悄调用清理接口
 TOKEN = secrets.token_hex(16)
@@ -873,6 +874,7 @@ SUSPICIOUS_EXT = {
 MEDIA_EXT = {".jpg", ".jpeg", ".png", ".heic", ".cr2", ".raw", ".mp4", ".mov", ".mkv"}
 ARCHIVE_EXT = {".zip", ".7z", ".rar"}
 TS_RE = __import__("re").compile(r"^\d{8}_\d{6}$")
+TS_RE_DRIVE = __import__("re").compile(r"^[A-Za-z]:[\\/]?$")
 
 
 def quarantine_roots():
@@ -1024,6 +1026,60 @@ def api_quarantine(action, batch=None):
     return {"error": "unknown action"}
 
 
+def list_drives():
+    try:
+        return [d.rstrip("\\") + ":" if len(d) == 1 else d.rstrip("\\") for d in os.listdrives()]
+    except AttributeError:
+        return ["C:"]
+
+
+# 首次使用（还没有扫描数据）时的欢迎引导页
+WELCOME_HTML = """<!doctype html><html lang="zh-CN"><body>
+<meta charset="utf-8"><title>c-cleaner</title>
+<style>
+body { margin:0; background:#f7f6f3; color:#1a1915; display:grid; place-items:center; min-height:100vh;
+  font:15px/1.7 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+@media (prefers-color-scheme: dark) { body { background:#121210; color:#f2f1ec; } .card { background:#1c1c1a !important; } }
+.card { background:#fdfdfc; border-radius:18px; padding:38px 44px; max-width:560px;
+  box-shadow:0 10px 30px rgba(0,0,0,.12); text-align:center; }
+h1 { font-size:24px; margin:0 0 6px; }
+p { color:#8b887f; margin:6px 0 22px; }
+button { background:#2a78d6; color:#fff; border:none; border-radius:10px; padding:12px 22px;
+  font-size:16px; font-weight:650; cursor:pointer; margin:4px; }
+button:hover { filter:brightness(1.08); }
+button:disabled { opacity:.5; }
+.spin { display:inline-block; width:15px; height:15px; border:2px solid rgba(128,128,128,.3);
+  border-top-color:#2a78d6; border-radius:50%; animation:sp 1s linear infinite; vertical-align:-2px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+</style>
+<div class="card">
+  <h1>💽 c-cleaner</h1>
+  <p>还没有扫描数据。选择要分析的磁盘，开始首次扫描<br>（约 20~60 秒，只读不动任何文件）</p>
+  <div id="btns"></div>
+  <p id="st"></p>
+</div>
+<script>
+const TOKEN = "__TOKEN__", DRIVES = __DRIVES__;
+const btns = document.getElementById("btns"), st = document.getElementById("st");
+for (const d of DRIVES) {
+  const b = document.createElement("button");
+  b.textContent = "扫描 " + d;
+  b.onclick = async () => {
+    document.querySelectorAll("button").forEach(x => x.disabled = true);
+    st.innerHTML = '<span class="spin"></span> 正在扫描 ' + d + ' …完成后自动进入报告';
+    try {
+      const r = await fetch("/api/rescan", { method:"POST",
+        headers: {"Content-Type":"application/json","X-CC-Token":TOKEN},
+        body: JSON.stringify({target: d + "\\\\"}) });
+      const j = await r.json();
+      if (j.ok) location.reload(); else st.textContent = "失败: " + JSON.stringify(j);
+    } catch(e) { st.textContent = "失败: " + e; }
+  };
+  btns.appendChild(b);
+}
+</script></body></html>"""
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # 安静
@@ -1046,10 +1102,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 html = html.replace(b"<script>", inject, 1)
                 self._send(200, html, "text/html; charset=utf-8")
             except OSError:
-                self._send(404, {"error": "report.html 不存在，请先运行 python main.py"})
+                # 首次使用：给引导页，选盘开扫
+                page = WELCOME_HTML.replace("__TOKEN__", TOKEN) \
+                                   .replace("__DRIVES__", json.dumps(list_drives()))
+                self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
         elif self.path == "/api/ping":
-            self._send(200, {"ok": True, "version": "1.4",
-                             "ai_available": CLAUDE_AVAILABLE, "ai_provider": AI_PROVIDER})
+            self._send(200, {"ok": True, "version": VERSION,
+                             "ai_available": CLAUDE_AVAILABLE, "ai_provider": AI_PROVIDER,
+                             "drives": list_drives()})
         elif self.path == "/api/cleanlog":
             try:
                 with open(os.path.join(OUT, "cleanup_log.json"), encoding="utf-8") as f:
@@ -1072,8 +1132,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             if self.path == "/api/rescan":
                 # 重新走一遍 扫描→分析→出报告（20~60秒），完成后页面自行 reload
-                with open(os.path.join(OUT, "analysis.json"), encoding="utf-8") as f:
-                    target = json.load(f)["meta"]["target"]
+                target = (req.get("target") or "").strip()
+                if target:
+                    # 只接受盘符（如 D:\）或已存在目录，防注入
+                    if not (TS_RE_DRIVE.match(target) or os.path.isdir(target)):
+                        self._send(400, {"error": "非法扫描目标: " + target})
+                        return
+                else:
+                    try:
+                        with open(os.path.join(OUT, "analysis.json"), encoding="utf-8") as f:
+                            target = json.load(f)["meta"]["target"]
+                    except (OSError, json.JSONDecodeError, KeyError):
+                        target = "C:\\"
                 for script, args in (("scanner.py", [target, os.path.join(OUT, "scan_result.json")]),
                                      ("analyze.py", [os.path.join(OUT, "scan_result.json"), os.path.join(OUT, "analysis.json")]),
                                      ("report.py", [])):

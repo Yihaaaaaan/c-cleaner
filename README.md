@@ -1,5 +1,10 @@
 # c-cleaner — 带 AI 判定的磁盘清理分析器
 
+[![CI](https://github.com/Yihaaaaaan/c-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/Yihaaaaaan/c-cleaner/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+
 > **EN** — A Windows disk-space analyzer like SpaceSniffer/WizTree, plus an **AI brain**:
 > for every space hog it tells you *what it is, whether it's safe to delete, and how*.
 > Pure Python stdlib, zero dependencies, runs offline. Scans ~900k files in ~20 s.
