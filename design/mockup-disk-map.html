@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C-CLEANER · 视觉样稿 v2 — 磁盘地图</title>
+<style>
+/* ============ tokens ============ */
+:root{
+  --bg:#0c0d11;
+  --bg-deep:#08090c;
+  --surface:rgba(255,255,255,.04);
+  --surface-2:rgba(255,255,255,.07);
+  --line:rgba(255,255,255,.08);
+  --line-strong:rgba(255,255,255,.14);
+  --text:#f2f2f5;
+  --text-2:rgba(242,242,245,.62);
+  --text-3:rgba(242,242,245,.38);
+
+  /* 语义色 —— 颜色是发光的,不是涂上去的 */
+  --safe:#4ade80;
+  --warn:#e2b040;
+  --danger:#f0564a;
+  --locked:#7dd3fc;
+  --neutral:#8b8d98;
+
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,ui-monospace,monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+  --r-card:14px;
+  --r-block:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{
+  font:14px/1.7 var(--sans);
+  color:var(--text);
+  background:
+    radial-gradient(1200px 600px at 75% -10%, rgba(125,211,252,.05), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(74,222,128,.04), transparent 60%),
+    var(--bg);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 28px 120px}
+
+/* ============ top bar ============ */
+.topbar{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.brand{font-family:var(--mono);font-size:13px;letter-spacing:.18em;color:var(--text-2)}
+.brand b{color:var(--text);font-weight:600}
+.live{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--safe);
+  border:1px solid rgba(74,222,128,.25);border-radius:999px;padding:2px 10px;
+  background:rgba(74,222,128,.06);
+}
+.live .dot{width:6px;height:6px;border-radius:50%;background:var(--safe);
+  box-shadow:0 0 8px rgba(74,222,128,.8);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.meta{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--text-3);letter-spacing:.04em}
+
+h1{font-size:21px;font-weight:600;letter-spacing:.02em;margin:2px 0 22px}
+
+/* ============ hero numbers ============ */
+.heroes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+.hero{
+  position:relative;overflow:hidden;
+  border:1px solid var(--line);border-radius:var(--r-card);
+  background:var(--surface);
+  padding:18px 20px 16px;
+}
+.hero::before{ /* 氛围光雾 */
+  content:"";position:absolute;inset:-40%;
+  background:radial-gradient(ellipse at 22% 18%, var(--glow) , transparent 55%);
+  opacity:.9;pointer-events:none;
+}
+.hero.h-free{--glow:rgba(240,86,74,.13)}
+.hero.h-clean{--glow:rgba(74,222,128,.13)}
+.hero.h-used{--glow:rgba(139,141,152,.10)}
+.hero .k{position:relative;font-size:12px;color:var(--text-2);letter-spacing:.1em}
+.hero .v{
+  position:relative;font-family:var(--mono);font-weight:600;
+  font-size:38px;line-height:1.15;letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+}
+.hero .v small{font-size:15px;font-weight:400;color:var(--text-2);margin-left:4px;letter-spacing:0}
+.hero .sub{position:relative;font-size:12px;color:var(--text-3);margin-top:2px}
+.h-free .v{color:#ff8a80}
+.h-clean .v{color:#86efac}
+
+/* ============ capacity bar ============ */
+.capacity{
+  border:1px solid var(--line);border-radius:var(--r-card);
+  background:var(--surface);padding:14px 20px 16px;margin-bottom:22px;
+}
+.capbar{display:flex;height:10px;border-radius:999px;overflow:hidden;gap:2px;background:var(--bg-deep)}
+.capbar i{display:block;height:100%}
+.capbar .c-sys{flex:38;background:linear-gradient(180deg,#3d4048,#2c2f36)}
+.capbar .c-app{flex:24;background:linear-gradient(180deg,#4a5568,#3a4354)}
+.capbar .c-user{flex:22;background:linear-gradient(180deg,rgba(125,211,252,.55),rgba(125,211,252,.3))}
+.capbar .c-clean{flex:11;background:linear-gradient(180deg,rgba(74,222,128,.75),rgba(74,222,128,.45));
+  box-shadow:0 0 12px rgba(74,222,128,.35)}
+.capbar .c-free{flex:5;background:repeating-linear-gradient(45deg,rgba(240,86,74,.4) 0 4px,rgba(240,86,74,.15) 4px 8px)}
+.caplegend{display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--text-2);flex-wrap:wrap}
+.caplegend .lg{display:inline-flex;align-items:center;gap:6px}
+.caplegend .sw{width:8px;height:8px;border-radius:2px}
+.caplegend .n{font-family:var(--mono);font-size:11.5px;color:var(--text-3)}
+
+/* ============ tabs ============ */
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{
+  appearance:none;background:none;border:none;cursor:pointer;
+  font:13px/1 var(--sans);color:var(--text-3);letter-spacing:.04em;
+  padding:10px 16px 12px;position:relative;
+}
+.tab:hover{color:var(--text-2)}
+.tab.on{color:var(--text)}
+.tab.on::after{
+  content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--text),transparent);
+  border-radius:2px;
+}
+.tab .num{font-family:var(--mono);font-size:10.5px;color:var(--text-3);margin-right:6px}
+
+/* ============ main split ============ */
+.split{display:grid;grid-template-columns:1fr 340px;gap:14px;align-items:start}
+
+.panel{
+  border:1px solid var(--line);border-radius:var(--r-card);
+  background:var(--surface);padding:16px;
+}
+.crumbs{font-family:var(--mono);font-size:12px;color:var(--text-3);margin-bottom:12px;letter-spacing:.02em}
+.crumbs b{color:var(--text-2);font-weight:500}
+.crumbs .sep{margin:0 6px;color:var(--text-3)}
+
+/* ============ treemap ============ */
+.treemap{
+  display:grid;gap:3px;
+  grid-template-columns:repeat(24,1fr);
+  grid-auto-rows:34px;
+  border-radius:10px;overflow:hidden;
+}
+.blk{
+  position:relative;border-radius:var(--r-block);overflow:hidden;
+  background:var(--surface-2);
+  cursor:pointer;
+  transition:filter .18s ease, outline-color .18s ease;
+  outline:1px solid transparent;outline-offset:-1px;
+}
+/* 氛围光: 每块 = 色雾 + cushion 高光 + 底部沉降 */
+.blk::before{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 22%, rgba(255,255,255,.16), transparent 60%),
+    linear-gradient(transparent 55%, rgba(0,0,0,.32)),
+    radial-gradient(ellipse at 50% 110%, var(--hue-deep), transparent 70%),
+    linear-gradient(160deg, var(--hue-soft), var(--hue-deep));
+  opacity:var(--lum,.85);
+}
+.blk:hover{filter:brightness(1.22);outline-color:rgba(255,255,255,.35);z-index:2}
+.blk .lab{
+  position:absolute;left:9px;top:6px;right:8px;z-index:1;
+  font-size:12px;font-weight:500;letter-spacing:.02em;
+  text-shadow:0 1px 3px rgba(0,0,0,.55);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.blk .sz{
+  position:absolute;left:9px;bottom:5px;z-index:1;
+  font-family:var(--mono);font-size:10.5px;color:rgba(255,255,255,.75);
+  font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.55);
+}
+.blk .tag{
+  position:absolute;right:7px;top:7px;z-index:1;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
+  padding:1px 7px;border-radius:999px;
+  background:rgba(0,0,0,.38);backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,.14);
+}
+
+/* 色相 = 语义 */
+.hu-safe   {--hue-soft:rgba(74,222,128,.34); --hue-deep:rgba(20,83,45,.55)}
+.hu-warn   {--hue-soft:rgba(226,176,64,.32); --hue-deep:rgba(113,63,18,.5)}
+.hu-danger {--hue-soft:rgba(240,86,74,.30);  --hue-deep:rgba(127,29,29,.5)}
+.hu-locked {--hue-soft:rgba(125,211,252,.26);--hue-deep:rgba(12,74,110,.5)}
+.hu-none   {--hue-soft:rgba(139,141,152,.16);--hue-deep:rgba(139,141,152,.10)}
+.dim{--lum:.5}
+
+/* 布局(手排 squarified 近似) */
+.b1 {grid-column:span 10;grid-row:span 6}
+.b2 {grid-column:span 8; grid-row:span 4}
+.b3 {grid-column:span 6; grid-row:span 4}
+.b4 {grid-column:span 8; grid-row:span 3}
+.b5 {grid-column:span 6; grid-row:span 3}
+.b6 {grid-column:span 5; grid-row:span 3}
+.b7 {grid-column:span 5; grid-row:span 2}
+.b8 {grid-column:span 4; grid-row:span 2}
+.b9 {grid-column:span 5; grid-row:span 2}
+.b10{grid-column:span 4; grid-row:span 2}
+.b11{grid-column:span 3; grid-row:span 2}
+.b12{grid-column:span 3; grid-row:span 2}
+.b13{grid-column:span 4; grid-row:span 1}
+.b14{grid-column:span 4; grid-row:span 1}
+/* 单行小块: 只留标签,垂直居中 */
+.b13 .sz,.b14 .sz{display:none}
+.b13 .lab,.b14 .lab{top:50%;transform:translateY(-50%);font-size:11.5px}
+
+.maphint{font-size:12px;color:var(--text-3);margin-top:12px}
+.maphint .k{display:inline-flex;align-items:center;gap:5px;margin-right:14px}
+.maphint .g{width:7px;height:7px;border-radius:50%}
+.g-safe{background:var(--safe);box-shadow:0 0 6px rgba(74,222,128,.7)}
+.g-warn{background:var(--warn);box-shadow:0 0 6px rgba(226,176,64,.7)}
+.g-danger{background:var(--danger);box-shadow:0 0 6px rgba(240,86,74,.7)}
+.g-locked{background:var(--locked);box-shadow:0 0 6px rgba(125,211,252,.7)}
+.g-none{background:var(--neutral)}
+
+/* ============ detail panel ============ */
+.detail .path{font-family:var(--mono);font-size:12px;color:var(--text-2);word-break:break-all;line-height:1.6}
+.detail .big{
+  font-family:var(--mono);font-weight:600;font-size:32px;
+  font-variant-numeric:tabular-nums;color:#86efac;margin:8px 0 2px;
+}
+.detail .big small{font-size:14px;font-weight:400;color:var(--text-2)}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;letter-spacing:.04em;
+  border-radius:999px;padding:3px 12px;margin:10px 0 14px;
+  border:1px solid rgba(74,222,128,.3);color:#86efac;background:rgba(74,222,128,.07);
+}
+.badge .g{width:6px;height:6px;border-radius:50%}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:12.5px;margin-bottom:14px}
+.kv .k{color:var(--text-3)}
+.kv .v{color:var(--text-2);font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.explain{
+  font-size:12.5px;color:var(--text-2);line-height:1.75;
+  border-left:2px solid rgba(74,222,128,.4);padding-left:12px;margin-bottom:16px;
+}
+.actions{display:flex;gap:8px}
+.btn{
+  appearance:none;cursor:pointer;font:13px/1 var(--sans);letter-spacing:.03em;
+  border-radius:9px;padding:10px 16px;transition:.15s;
+  border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);
+}
+.btn:hover{background:rgba(255,255,255,.11)}
+.btn.primary{
+  border-color:rgba(74,222,128,.45);
+  background:linear-gradient(160deg,rgba(74,222,128,.2),rgba(74,222,128,.08));
+  color:#a7f3c8;box-shadow:0 0 18px rgba(74,222,128,.12);
+}
+.btn.primary:hover{box-shadow:0 0 24px rgba(74,222,128,.22)}
+
+/* 保护示例条 */
+.protected{
+  margin-top:16px;padding:11px 13px;border-radius:10px;
+  border:1px solid rgba(125,211,252,.22);background:rgba(125,211,252,.05);
+  font-size:12px;color:var(--text-2);display:flex;gap:9px;align-items:flex-start;
+}
+.protected .ico{color:var(--locked);font-size:13px;line-height:1.5}
+.protected b{color:#bae6fd;font-weight:500}
+
+/* ============ basket (玻璃浮层) ============ */
+.basket{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+  width:min(860px,calc(100vw - 48px));
+  display:flex;align-items:center;gap:14px;
+  padding:12px 14px 12px 20px;border-radius:16px;
+  background:rgba(18,19,24,.6);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 18px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.basket .sum{font-size:13px;color:var(--text-2)}
+.basket .sum b{font-family:var(--mono);color:#86efac;font-weight:600;font-variant-numeric:tabular-nums}
+.basket .chips{display:flex;gap:6px;flex:1;overflow:hidden}
+.chip{
+  font-family:var(--mono);font-size:11px;color:var(--text-2);
+  border:1px solid var(--line);border-radius:999px;padding:3px 10px;
+  white-space:nowrap;background:var(--surface);
+}
+.chip .g{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:6px;vertical-align:1.5px}
+.basket .ghost{border-color:transparent;background:none;color:var(--text-3)}
+.basket .ghost:hover{color:var(--text-2);background:var(--surface)}
+
+.note{margin-top:26px;font-size:11.5px;color:var(--text-3);font-family:var(--mono);letter-spacing:.03em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <span class="brand"><b>C-CLEANER</b> · 磁盘分析</span>
+    <span class="live"><span class="dot"></span>SCAN 2026-08-22 14:07</span>
+    <span class="meta">C:\ · NTFS · 237.4 GB</span>
+  </div>
+  <h1>C盘清理分析报告</h1>
+
+  <div class="heroes">
+    <div class="hero h-free">
+      <div class="k">剩余空间</div>
+      <div class="v">4.33<small>GB</small></div>
+      <div class="sub">低于安全水位 10 GB</div>
+    </div>
+    <div class="hero h-clean">
+      <div class="k">建议可清理</div>
+      <div class="v">25.4<small>GB</small></div>
+      <div class="sub">共 47 项 · 全部先入隔离区</div>
+    </div>
+    <div class="hero h-used">
+      <div class="k">已用空间</div>
+      <div class="v">233.1<small>GB</small></div>
+      <div class="sub">较上次扫描 +2.8 GB</div>
+    </div>
+  </div>
+
+  <div class="capacity">
+    <div class="capbar">
+      <i class="c-sys"></i><i class="c-app"></i><i class="c-user"></i><i class="c-clean"></i><i class="c-free"></i>
+    </div>
+    <div class="caplegend">
+      <span class="lg"><span class="sw" style="background:#3d4048"></span>系统 <span class="n">90.2G</span></span>
+      <span class="lg"><span class="sw" style="background:#4a5568"></span>应用 <span class="n">57.0G</span></span>
+      <span class="lg"><span class="sw" style="background:rgba(125,211,252,.5)"></span>用户数据 <span class="n">52.2G</span></span>
+      <span class="lg"><span class="sw" style="background:rgba(74,222,128,.6)"></span>可清理 <span class="n">25.4G</span></span>
+      <span class="lg"><span class="sw" style="background:rgba(240,86,74,.35)"></span>剩余 <span class="n">4.3G</span></span>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab on">磁盘地图</button>
+    <button class="tab"><span class="num">47</span>清理清单</button>
+    <button class="tab">文件浏览器</button>
+    <button class="tab">专项工具</button>
+    <button class="tab"><span class="num">12</span>隔离区</button>
+  </nav>
+
+  <div class="split">
+    <div class="panel">
+      <div class="crumbs"><b>C:\</b><span class="sep">›</span>全盘视图</div>
+
+      <div class="treemap">
+        <div class="blk b1 hu-none dim"><span class="lab">Windows</span><span class="sz">42.7 GB</span></div>
+        <div class="blk b2 hu-locked"><span class="lab">微信 WeChat Files</span><span class="sz">31.2 GB</span><span class="tag" style="color:#bae6fd">保护</span></div>
+        <div class="blk b3 hu-warn"><span class="lab">nvidia 驱动缓存</span><span class="sz">8.9 GB</span><span class="tag" style="color:#fde68a">注意</span></div>
+        <div class="blk b4 hu-safe"><span class="lab">Temp 临时文件</span><span class="sz">7.6 GB</span><span class="tag" style="color:#a7f3c8">安全</span></div>
+        <div class="blk b5 hu-safe"><span class="lab">pip / npm 缓存</span><span class="sz">5.8 GB</span><span class="tag" style="color:#a7f3c8">安全</span></div>
+        <div class="blk b6 hu-none dim"><span class="lab">Program Files</span><span class="sz">36.4 GB</span></div>
+        <div class="blk b7 hu-warn"><span class="lab">WinSxS 组件库</span><span class="sz">9.1 GB</span><span class="tag" style="color:#fde68a">注意</span></div>
+        <div class="blk b8 hu-safe"><span class="lab">浏览器缓存</span><span class="sz">4.2 GB</span><span class="tag" style="color:#a7f3c8">安全</span></div>
+        <div class="blk b9 hu-danger"><span class="lab">hiberfil.sys</span><span class="sz">6.3 GB</span><span class="tag" style="color:#fecaca">谨慎</span></div>
+        <div class="blk b10 hu-locked"><span class="lab">OneNote 缓存</span><span class="sz">3.1 GB</span><span class="tag" style="color:#bae6fd">保护</span></div>
+        <div class="blk b11 hu-safe"><span class="lab">旧更新包</span><span class="sz">2.4 GB</span></div>
+        <div class="blk b12 hu-none dim"><span class="lab">AppData 其他</span><span class="sz">18.8 GB</span></div>
+        <div class="blk b13 hu-warn"><span class="lab">Docker 镜像</span><span class="sz">1.9 GB</span></div>
+        <div class="blk b14 hu-none dim"><span class="lab">其他 · 214 项</span><span class="sz">12.2 GB</span></div>
+      </div>
+
+      <div class="maphint">
+        <span class="k"><span class="g g-safe"></span>安全可清</span>
+        <span class="k"><span class="g g-warn"></span>建议确认</span>
+        <span class="k"><span class="g g-danger"></span>谨慎操作</span>
+        <span class="k"><span class="g g-locked"></span>受保护</span>
+        <span class="k"><span class="g g-none"></span>系统/未识别</span>
+        · 点击色块进入下一级
+      </div>
+    </div>
+
+    <div class="panel detail">
+      <div class="path">C:\Users\18500\AppData\Local\<b style="color:var(--text)">Temp</b></div>
+      <div class="big">7.6 <small>GB</small></div>
+      <div class="badge"><span class="g g-safe"></span>安全等级 · 可放心清理</div>
+
+      <div class="kv">
+        <span class="k">文件数</span><span class="v">31,842</span>
+        <span class="k">最近写入</span><span class="v">2026-08-22</span>
+        <span class="k">30天未访问占比</span><span class="v">84%</span>
+        <span class="k">上次清理</span><span class="v">2026-07-31</span>
+      </div>
+
+      <div class="explain">
+        系统与应用的临时工作目录。文件均可再生,清理后应用会按需重建。
+        正在运行的程序占用的文件会自动跳过。
+      </div>
+
+      <div class="actions">
+        <button class="btn primary">加入清理篮 · 7.6 GB</button>
+        <button class="btn">浏览内容</button>
+      </div>
+
+      <div class="protected">
+        <span class="ico">🛡</span>
+        <span><b>2 项受保护内容已排除:</b>微信聊天记录、OneNote 缓存。
+        受保护项永远不会出现在清理建议中。</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">// 静态视觉样稿 v2 — Science · Peace · Nature / 氛围光语义系统 / 数据为演示用途</div>
+</div>
+
+<div class="basket">
+  <span class="sum">清理篮 · 3 项 · 合计 <b>15.8 GB</b></span>
+  <div class="chips">
+    <span class="chip"><span class="g g-safe"></span>Temp 7.6G</span>
+    <span class="chip"><span class="g g-safe"></span>pip/npm 5.8G</span>
+    <span class="chip"><span class="g g-safe"></span>旧更新包 2.4G</span>
+  </div>
+  <button class="btn ghost">清空</button>
+  <button class="btn primary">提交清理 → 隔离区</button>
+</div>
+</body>
+</html>
