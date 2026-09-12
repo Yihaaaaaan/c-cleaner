@@ -20,6 +20,7 @@ import json
 import os
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -71,6 +72,44 @@ def norm(p):
 
 def to_win(p):
     return p.replace("/", "\\")
+
+
+def force_rmtree(path):
+    """删除目录树，返回删不掉的条目列表（空列表=全删干净）。
+
+    比 shutil.rmtree(ignore_errors=True) 多两件事：
+      1. 只读文件（git 的 .pack/.idx、某些安装器留下的文件）先清只读位再重试；
+      2. 真删不掉的如实返回，不把失败吞掉——否则会对用户谎报已释放的空间。
+    """
+    failed = []
+
+    def handle(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError as e:
+            failed.append(p + " (" + e.__class__.__name__ + ")")
+
+    if os.path.exists(path):
+        if sys.version_info >= (3, 12):     # 3.12 起 onerror 废弃，3.14 移除
+            shutil.rmtree(path, onexc=handle)
+        else:
+            shutil.rmtree(path, onerror=lambda f, p, exc: handle(f, p, exc))
+    return failed
+
+
+def force_delete(path):
+    """删除文件或目录（只读位自动清除）。删不干净就抛 OSError，交给调用方记为失败。"""
+    if os.path.isdir(path):
+        failed = force_rmtree(path)
+        if failed:
+            raise OSError("删除未完成，残留 %d 项：%s" % (len(failed), failed[0]))
+        return
+    try:
+        os.remove(path)
+    except PermissionError:
+        os.chmod(path, stat.S_IWRITE)       # 只读文件，清位后重试一次
+        os.remove(path)
 
 
 def quarantine_root(target_path):
@@ -492,10 +531,7 @@ def api_clean(paths, permanent=False):
             try:
                 sz = dir_size(src) if os.path.isdir(src) else os.stat(src).st_size
                 if permanent:
-                    if os.path.isdir(src):
-                        shutil.rmtree(src)
-                    else:
-                        os.remove(src)
+                    force_delete(src)
                 else:
                     shutil.move(src, os.path.join(qdir, os.path.basename(src)))
                     mf_entries.append({"src": src,
@@ -766,7 +802,7 @@ def api_clean_paths(paths, permanent=False):
         try:
             sz = dir_size(wp) if is_dir else os.stat(wp).st_size
             if permanent:
-                shutil.rmtree(wp) if is_dir else os.remove(wp)
+                force_delete(wp)
             else:
                 qroot = quarantine_root(full)
                 if not qroot:
@@ -827,10 +863,7 @@ def api_clean_items(base, names, permanent=False):
         try:
             sz = dir_size(src) if is_dir else os.stat(src).st_size
             if permanent:
-                if is_dir:
-                    shutil.rmtree(src)
-                else:
-                    os.remove(src)
+                force_delete(src)
             else:
                 os.makedirs(qdir, exist_ok=True)
                 shutil.move(src, os.path.join(qdir, name))
@@ -985,7 +1018,7 @@ def api_quarantine_restore(batch):
             with open(mf, "w", encoding="utf-8") as f:
                 json.dump({"entries": remaining}, f, ensure_ascii=False)
         else:
-            shutil.rmtree(bdir, ignore_errors=True)
+            failed += force_rmtree(bdir)
     return {"restored": restored, "restored_bytes": restored_bytes,
             "skipped_exists": skipped[:20], "failed": failed[:20]}
 
@@ -1009,20 +1042,19 @@ def api_quarantine(action, batch=None):
                 oldest_days = days if oldest_days is None else max(oldest_days, days)
         return {"roots": roots, "total_bytes": total, "oldest_days": oldest_days}
     if action == "empty":
-        freed = 0
-        if batch:                     # 只清指定批次
-            if not TS_RE.match(batch):
-                return {"error": "非法批次号"}
-            for r in roots:
-                bdir = os.path.join(r, batch)
-                if os.path.isdir(bdir):
-                    freed += dir_size(bdir)
-                    shutil.rmtree(bdir, ignore_errors=True)
-        else:                         # 清全部
-            for r in roots:
-                freed += dir_size(r)
-                shutil.rmtree(r, ignore_errors=True)
-        return {"freed_bytes": freed}
+        if batch and not TS_RE.match(batch):
+            return {"error": "非法批次号"}
+        targets = [os.path.join(r, batch) for r in roots] if batch else list(roots)
+        freed, failed = 0, []
+        for t in targets:
+            if not os.path.isdir(t):
+                continue
+            before = dir_size(t)
+            failed += force_rmtree(t)
+            # 实测释放量 = 删之前 - 删之后残留，不拿"打算删多少"充数
+            freed += before - (dir_size(t) if os.path.isdir(t) else 0)
+        return {"freed_bytes": freed, "failed": failed[:20],
+                "failed_count": len(failed)}
     return {"error": "unknown action"}
 
 

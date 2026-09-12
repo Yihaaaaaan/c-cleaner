@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import shutil
+import stat
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -147,6 +148,68 @@ class TestSuspicion(unittest.TestCase):
     def test_small_media_ok_big_media_flagged(self):
         self.assertIsNone(serve.check_file_suspicion("thumb.jpg", 100 * 1024))
         self.assertIsNotNone(serve.check_file_suspicion("photo.jpg", 5 * 1024 * 1024))
+
+
+class TestForceRmtree(unittest.TestCase):
+    """只读文件（git 的 .pack/.idx 就是只读的）必须能删掉，且删不掉时不许谎报。"""
+
+    def setUp(self):
+        self.scratch = os.path.join(os.environ["LOCALAPPDATA"], "Temp", "cc_unittest_ro")
+        shutil.rmtree(self.scratch, ignore_errors=True)
+        os.makedirs(os.path.join(self.scratch, ".git", "objects", "pack"))
+        self.pack = os.path.join(self.scratch, ".git", "objects", "pack", "p.pack")
+        with open(self.pack, "w") as f:
+            f.write("x" * 1000)
+        os.chmod(self.pack, stat.S_IREAD)      # git 就是这么留的
+
+    def tearDown(self):
+        for root, _dirs, files in os.walk(self.scratch):
+            for fn in files:
+                try:
+                    os.chmod(os.path.join(root, fn), stat.S_IWRITE)
+                except OSError:
+                    pass
+        shutil.rmtree(self.scratch, ignore_errors=True)
+
+    def test_readonly_file_is_removed(self):
+        failed = serve.force_rmtree(self.scratch)
+        self.assertEqual(failed, [], "只读文件应被清除只读位后删掉")
+        self.assertFalse(os.path.exists(self.scratch))
+
+    def test_plain_rmtree_would_have_failed(self):
+        """回归锚点：老写法 ignore_errors=True 会静默残留——正是这个 bug。"""
+        shutil.rmtree(self.scratch, ignore_errors=True)
+        self.assertTrue(os.path.exists(self.pack), "只读文件不该被静默删掉（证明旧写法有残留）")
+
+    def test_force_delete_readonly_file(self):
+        serve.force_delete(self.pack)
+        self.assertFalse(os.path.exists(self.pack))
+
+    def test_empty_reports_real_freed_bytes(self):
+        """api_quarantine('empty') 报的 freed_bytes 必须是实测释放量。"""
+        qroot = serve.quarantine_roots()[0] if serve.quarantine_roots() else None
+        if not qroot:
+            self.skipTest("本机没有隔离区")
+        batch = "20200101_000000"          # 假批次，测完即删
+        bdir = os.path.join(qroot, batch)
+        os.makedirs(bdir, exist_ok=True)
+        try:
+            p = os.path.join(bdir, "ro.pack")
+            with open(p, "w") as f:
+                f.write("y" * 4096)
+            os.chmod(p, stat.S_IREAD)
+            r = serve.api_quarantine("empty", batch)
+            self.assertEqual(r.get("failed_count", 0), 0)
+            self.assertGreaterEqual(r["freed_bytes"], 4096)
+            self.assertFalse(os.path.exists(bdir))
+        finally:
+            for root, _d, files in os.walk(bdir):
+                for fn in files:
+                    try:
+                        os.chmod(os.path.join(root, fn), stat.S_IWRITE)
+                    except OSError:
+                        pass
+            shutil.rmtree(bdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

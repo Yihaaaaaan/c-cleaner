@@ -791,7 +791,12 @@ async function emptyBatch(batch) {
   const what = batch ? `批次 ${batch}` : "全部批次";
   if (!confirm(`将永久删除隔离区${what}（不可恢复）。确定？`)) return;
   const r = await api("/api/quarantine", {action: "empty", batch});
-  toast("已清空，释放 " + fmt(r.freed_bytes || 0));
+  let msg = "已释放 " + fmt(r.freed_bytes || 0);
+  if (r.failed_count) {
+    msg += `；${r.failed_count} 项删不掉（被占用或权限不足），已保留`;
+    console.warn("隔离区清空残留：", r.failed);
+  }
+  toast(msg);
   refreshQuarantine(); renderQuarantine();
 }
 async function restoreBatch(batch) {
