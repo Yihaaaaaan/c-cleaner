@@ -97,7 +97,7 @@ def _guid(s):
     return g
 
 
-def write_lnk(lnk, target, workdir="", icon="", desc=""):
+def write_lnk(lnk, target, workdir="", icon="", desc="", args=""):
     """用 ctypes 直调 IShellLinkW 写 .lnk。
 
     不走 WScript.Shell：路径里带中文时它会抛
@@ -128,6 +128,8 @@ def write_lnk(lnk, target, workdir="", icon="", desc=""):
 
     try:
         check(method(obj, 20, c_wchar_p)(obj, target), "SetPath")
+        if args:
+            check(method(obj, 11, c_wchar_p)(obj, args), "SetArguments")
         if workdir:
             check(method(obj, 9, c_wchar_p)(obj, workdir), "SetWorkingDirectory")
         if desc:
@@ -147,18 +149,38 @@ def write_lnk(lnk, target, workdir="", icon="", desc=""):
         method(obj, 2)(obj)                         # Release
 
 
+def windowless_python():
+    """找一个不带控制台的解释器：pyw.exe 或 pythonw.exe，都没有则 None。
+
+    快捷方式直指它，可以完全没有黑窗一闪（走 .bat 的话 cmd 窗口必闪一下）。
+    """
+    for c in (os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "pyw.exe"),
+              os.path.join(os.path.dirname(sys.executable or ""), "pythonw.exe")):
+        if os.path.isfile(c):
+            return c
+    return None
+
+
 def make_shortcut():
-    """在桌面放一个快捷方式，指向本目录的 C盘清理.bat。"""
+    """在桌面放一个快捷方式，指向桌面应用入口 desktop.py。"""
+    app = os.path.join(HERE, "desktop.py")
     bat = os.path.join(HERE, "C盘清理.bat")
-    if not os.path.isfile(bat):
-        raise SystemExit("找不到 %s" % bat)
+    if not os.path.isfile(app):
+        raise SystemExit("找不到 %s" % app)
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
     if not os.path.isdir(desktop):
         raise SystemExit("找不到桌面目录：%s" % desktop)
     lnk = os.path.join(desktop, "C盘清理.lnk")
     icon = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
                         "System32", "cleanmgr.exe") + ",0"
-    write_lnk(lnk, bat, HERE, icon, "C盘清理分析器 - 扫描并清理 C 盘")
+    pyw = windowless_python()
+    if pyw:
+        write_lnk(lnk, pyw, HERE, icon, "C盘清理分析器 - 扫描并清理 C 盘",
+                  args='"%s"' % app)
+    else:
+        if not os.path.isfile(bat):
+            raise SystemExit("找不到 %s" % bat)
+        write_lnk(lnk, bat, HERE, icon, "C盘清理分析器 - 扫描并清理 C 盘")
     if not os.path.isfile(lnk):                     # 别信"没报错"，看文件在不在
         raise SystemExit("快捷方式没写成：%s" % lnk)
     print("桌面快捷方式已创建：%s" % lnk)

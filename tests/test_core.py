@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import knowledge          # noqa: E402
+import desktop            # noqa: E402
 import launcher           # noqa: E402
 import serve              # noqa: E402
 import winapp2 as w2      # noqa: E402
@@ -273,6 +274,38 @@ class TestLauncher(unittest.TestCase):
                 body.decode("ascii")
             except UnicodeDecodeError:
                 self.fail(name + " 含非 ASCII 字符")
+
+
+class TestDesktop(unittest.TestCase):
+    """桌面应用模式：端口一致、独立 profile、app 窗口参数、线程安全。"""
+
+    def test_port_matches_serve(self):
+        self.assertEqual(desktop.PORT, serve.PORT)
+
+    def test_profile_is_isolated(self):
+        """必须用独立 user-data-dir：共用日常浏览器的话，新窗口会挂到已有进程上，
+        我们起的进程秒退，等不到窗口关闭，服务就永远收不掉。"""
+        self.assertNotIn("Google\\Chrome\\User Data", desktop.PROFILE)
+        self.assertIn("c-cleaner", desktop.PROFILE)
+
+    def test_app_window_args(self):
+        """--app 是去掉地址栏/标签页的关键，漏了就退化成普通浏览器窗口。"""
+        src = open(os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "desktop.py"), encoding="utf-8").read()
+        for flag in ('"--app=" + URL', '"--user-data-dir=" + PROFILE'):
+            self.assertIn(flag, src, "缺少 " + flag)
+
+    def test_worker_never_touches_tk(self):
+        """tkinter 不是线程安全的：worker 里直接改 Label 会抛异常，
+        表现为双击后只弹一个'启动失败'、服务根本没起。worker 只能写 state['msg']。"""
+        src = open(os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "desktop.py"), encoding="utf-8").read()
+        body = src[src.index("    def work():"):src.index("    t = threading.Thread")]
+        self.assertNotIn("splash.", body, "worker 线程里不允许碰 splash/tk")
+
+    def test_pythonw_path_is_real_or_falls_back(self):
+        p = desktop.pythonw()
+        self.assertTrue(os.path.isfile(p) or p == sys.executable)
 
 
 if __name__ == "__main__":
