@@ -20,7 +20,15 @@
 
 ## 使用
 
+**Windows 最省事的用法**：双击 `C盘清理.bat`。没扫描过就直接全盘扫描，扫过就给菜单
+（打开上次报告 / 重扫 C 盘 / 扫其他盘），10 秒不按键默认打开上次的报告；服务已在跑则
+只开浏览器，不会重复起。想放到桌面的话，先双击一次 `创建桌面快捷方式.bat`。
+
+命令行等价用法：
+
 ```bash
+python launcher.py          # 同上的菜单式入口
+python launcher.py --shortcut   # 只创建桌面快捷方式
 python main.py              # 扫描 C 盘 → 分析 → 生成报告 → 启动服务并打开浏览器
 python main.py D:\          # 扫描其他盘
 python main.py --ai         # 让 Claude CLI 自动分析知识库不认识的大目录
@@ -29,7 +37,6 @@ python serve.py             # 报告已生成时，单独启动服务 http://127
 ```
 
 纯 Python 标准库，无需安装任何依赖（Python ≥3.10）。扫描 86 万文件约 20 秒。
-Windows 双击 `重新扫描.bat` / `启动报告.bat` 亦可。
 
 **个人保护规则**：复制 `user_rules.example.json` 为 `user_rules.json`，写入你永远不想删的
 路径（如聊天记录、笔记缓存），它们会以最高优先级判为 🔒保留，AI 和社区规则都无法覆盖。

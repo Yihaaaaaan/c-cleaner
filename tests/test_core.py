@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import knowledge          # noqa: E402
+import launcher           # noqa: E402
 import serve              # noqa: E402
 import winapp2 as w2      # noqa: E402
 
@@ -210,6 +211,68 @@ class TestForceRmtree(unittest.TestCase):
                     except OSError:
                         pass
             shutil.rmtree(bdir, ignore_errors=True)
+
+
+class TestLauncher(unittest.TestCase):
+    """双击入口：端口探活、扫描时间显示、快捷方式写入。"""
+
+    def setUp(self):
+        self.tmp = os.path.join(os.environ["LOCALAPPDATA"], "Temp", "cc_unittest_lnk")
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        os.makedirs(self.tmp)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_port_matches_serve(self):
+        """launcher 探的端口必须和 serve 实际监听的是同一个。"""
+        self.assertEqual(launcher.PORT, serve.PORT)
+
+    def test_server_alive_false_when_nothing_listening(self):
+        import socket as _s
+        sock = _s.socket()
+        sock.bind(("127.0.0.1", 0))          # 借一个确定没人用的端口
+        free_port = sock.getsockname()[1]
+        sock.close()
+        old, launcher.PORT = launcher.PORT, free_port
+        try:
+            self.assertFalse(launcher.server_alive())
+        finally:
+            launcher.PORT = old
+
+    def test_age_text_missing_file(self):
+        self.assertIsNone(launcher.age_text(os.path.join(self.tmp, "nope.json")))
+
+    def test_age_text_fresh_file(self):
+        p = os.path.join(self.tmp, "a.json")
+        open(p, "w").close()
+        self.assertIn("分钟前", launcher.age_text(p))
+
+    def test_write_lnk_handles_chinese_path(self):
+        """项目目录本身带中文；WScript.Shell 在这种路径上会报
+        'Value does not fall within the expected range'，所以必须走 IShellLinkW。"""
+        cdir = os.path.join(self.tmp, "中文目录")
+        os.makedirs(cdir)
+        target = os.path.join(cdir, "启动.bat")
+        with open(target, "w") as f:
+            f.write("@echo off\n")
+        lnk = os.path.join(self.tmp, "测试快捷方式.lnk")
+        launcher.write_lnk(lnk, target, cdir, desc="unittest")
+        self.assertTrue(os.path.isfile(lnk), "带中文路径的快捷方式必须能写成")
+        self.assertGreater(os.path.getsize(lnk), 0)
+
+    def test_bat_entry_exists_and_is_ascii(self):
+        """.bat 内容必须是纯 ASCII：非 UTF-8 代码页下中文会被 cmd 吃成乱码。"""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for name in ("C盘清理.bat", "创建桌面快捷方式.bat"):
+            p = os.path.join(root, name)
+            self.assertTrue(os.path.isfile(p), name + " 必须存在")
+            with open(p, "rb") as f:
+                body = f.read()
+            try:
+                body.decode("ascii")
+            except UnicodeDecodeError:
+                self.fail(name + " 含非 ASCII 字符")
 
 
 if __name__ == "__main__":
